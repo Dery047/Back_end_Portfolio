@@ -1,20 +1,50 @@
 import React, { useState, useEffect } from 'react';
 
 function App() {
+  // Autenticación
+  const [token, setToken] = useState(null);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+
+  // Estados de tareas
   const [tareas, setTareas] = useState([]);
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [fechaLimite, setFechaLimite] = useState('');
 
   const API_URL = 'http://localhost:8000/api/tareas/';
+  const LOGIN_URL = 'http://localhost:8000/api/token/';
 
-  useEffect(() => {
-    fetch(API_URL)
+  // Función de login
+  const login = () => {
+    fetch(LOGIN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    })
       .then(res => res.json())
-      .then(data => setTareas(data))
-      .catch(err => console.error('Error al cargar tareas:', err));
-  }, []);
+      .then(data => {
+        if (data.access) {
+          setToken(data.access);
+        } else {
+          alert('Login fallido');
+        }
+      })
+      .catch(err => console.error('Error en login:', err));
+  };
 
+  // Cargar tareas al cambiar token
+  useEffect(() => {
+    if (!token) return;
+    fetch(API_URL, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(res => res.json())
+      .then(data => setTareas(Array.isArray(data) ? data : []))
+      .catch(err => console.error('Error al cargar tareas:', err));
+  }, [token]);
+
+  // Agregar tarea
   const agregarTarea = () => {
     if (!titulo.trim()) return;
 
@@ -27,7 +57,10 @@ function App() {
 
     fetch(API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify(nueva),
     })
       .then(res => res.json())
@@ -40,10 +73,14 @@ function App() {
       .catch(err => console.error('Error al agregar tarea:', err));
   };
 
+  // Toggle completada
   const toggleCompletada = (id, completada) => {
     fetch(`${API_URL}${id}/`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({ completada: !completada }),
     })
       .then(res => res.json())
@@ -53,9 +90,11 @@ function App() {
       .catch(err => console.error('Error al actualizar tarea:', err));
   };
 
+  // Eliminar tarea
   const eliminarTarea = id => {
     fetch(`${API_URL}${id}/`, {
       method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
     })
       .then(() => {
         setTareas(tareas.filter(t => t.id !== id));
@@ -115,6 +154,33 @@ function App() {
     },
   };
 
+  // Renderizado condicionado por autenticación
+  if (!token) {
+    return (
+      <div style={estilos.contenedor}>
+        <h1>🔒 Login</h1>
+        <input
+          type="text"
+          placeholder="Usuario"
+          value={username}
+          onChange={e => setUsername(e.target.value)}
+          style={estilos.input}
+        />
+        <input
+          type="password"
+          placeholder="Contraseña"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          style={estilos.input}
+        />
+        <button onClick={login} style={estilos.boton}>
+          Iniciar Sesión
+        </button>
+      </div>
+    );
+  }
+
+  // UI de tareas tras login
   return (
     <div style={estilos.contenedor}>
       <h1>📝 Mi ToDo List</h1>
@@ -143,32 +209,33 @@ function App() {
       </button>
 
       <ul style={estilos.lista}>
-        {tareas.map(tarea => (
-          <li
-            key={tarea.id}
-            style={estilos.tarea(tarea.completada)}
-            onClick={() => toggleCompletada(tarea.id, tarea.completada)}
-          >
-            <strong>{tarea.titulo}</strong>
-            {tarea.descripcion && <p>{tarea.descripcion}</p>}
-            {tarea.fecha_limite && (
-              <p>📅 Vence: {tarea.fecha_limite}</p>
-            )}
-            <button
-              onClick={e => {
-                e.stopPropagation();
-                eliminarTarea(tarea.id);
-              }}
-              style={estilos.eliminar}
+        {tareas.length > 0 ? (
+          tareas.map(t => (
+            <li
+              key={t.id}
+              style={estilos.tarea(t.completada)}
+              onClick={() => toggleCompletada(t.id, t.completada)}
             >
-              Eliminar
-            </button>
-          </li>
-        ))}
+              <strong>{t.titulo}</strong>
+              {t.descripcion && <p>{t.descripcion}</p>}
+              {t.fecha_limite && <p>📅 Vence: {t.fecha_limite}</p>}
+              <button
+                onClick={e => {
+                  e.stopPropagation();
+                  eliminarTarea(t.id);
+                }}
+                style={estilos.eliminar}
+              >
+                Eliminar
+              </button>
+            </li>
+          ))
+        ) : (
+          <p>No hay tareas para mostrar.</p>
+        )}
       </ul>
     </div>
   );
 }
 
 export default App;
-

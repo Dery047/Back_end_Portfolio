@@ -1,16 +1,12 @@
-from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
-from django.contrib.auth.models import User
-from rest_framework import generics
+from rest_framework import viewsets, status
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.serializers import ModelSerializer
+from django.contrib.auth.models import User
 from .models import Tarea
 from .serializers import TareaSerializer
-
-# ViewSet para las tareas (protegida para usuarios autenticados)
-class TareaViewSet(viewsets.ModelViewSet):
-    queryset = Tarea.objects.all().order_by('-creada_en')
-    serializer_class = TareaSerializer
-    permission_classes = [IsAuthenticated]  # Solo usuarios autenticados pueden usar esta API
+from rest_framework.authtoken.models import Token
 
 # Serializer para registrar usuarios
 class UserSerializer(ModelSerializer):
@@ -21,9 +17,27 @@ class UserSerializer(ModelSerializer):
 
     def create(self, validated_data):
         user = User.objects.create_user(**validated_data)
+        Token.objects.create(user=user)  # Crear token al registrar
         return user
 
-# API para registro de usuarios
-class RegisterUserAPIView(generics.CreateAPIView):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
+# API para registrar usuarios
+class RegisterUserAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = UserSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Usuario registrado exitosamente."}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# ViewSet para las tareas (requiere login)
+class TareaViewSet(viewsets.ModelViewSet):
+    serializer_class = TareaSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Tarea.objects.filter(usuario=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(usuario=self.request.user)

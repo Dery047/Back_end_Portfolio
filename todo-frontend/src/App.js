@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 
 function App() {
-  // Autenticación
   const [token, setToken] = useState(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [mostrarRegistro, setMostrarRegistro] = useState(false);
 
-  // Estados de tareas
   const [tareas, setTareas] = useState([]);
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -14,26 +13,61 @@ function App() {
 
   const API_URL = 'http://localhost:8000/api/tareas/';
   const LOGIN_URL = 'http://localhost:8000/api/token/';
+  const REGISTER_URL = 'http://localhost:8000/api/register/';
 
-  // Función de login
-  const login = () => {
-    fetch(LOGIN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+const login = () => {
+  fetch(LOGIN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.access) {
+        setToken(data.access);
+        localStorage.setItem('token', data.access); // guardo token para mantener los datos guardados::: saving token to almacenate the data
+      } else {
+        alert('Login fallido');
+      }
     })
-      .then(res => res.json())
-      .then(data => {
-        if (data.access) {
-          setToken(data.access);
-        } else {
-          alert('Login fallido');
-        }
-      })
-      .catch(err => console.error('Error en login:', err));
-  };
+    .catch(err => console.error('Error en login:', err));
+};
 
-  // Cargar tareas al cambiar token
+ const registrar = () => {
+  fetch(REGISTER_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+    .then(res => {
+      if (res.status === 201) {
+        alert('✅ Usuario registrado con éxito. Inicia sesión para continuar.');
+        setMostrarRegistro(false); // cambia a vista de login
+      } else {
+        return res.json().then(data => {
+          alert('❌ Error en registro: ' + JSON.stringify(data));
+        });
+      }
+    })
+    .catch(err => {
+      console.error('Error en registro:', err);
+      alert('❌ Error en registro.');
+    });
+};
+  const logout = () => {
+    setToken(null);
+    localStorage.removeItem('token'); 
+    setUsername('');
+    setPassword('');
+    setTareas([]);
+  };
+useEffect(() => { //carga el localstorage si lo encuentra
+  const storedToken = localStorage.getItem('token');
+  if (storedToken) {
+    setToken(storedToken);
+  }
+}, []);
+
   useEffect(() => {
     if (!token) return;
     fetch(API_URL, {
@@ -44,7 +78,6 @@ function App() {
       .catch(err => console.error('Error al cargar tareas:', err));
   }, [token]);
 
-  // Agregar tarea
   const agregarTarea = () => {
     if (!titulo.trim()) return;
 
@@ -73,7 +106,6 @@ function App() {
       .catch(err => console.error('Error al agregar tarea:', err));
   };
 
-  // Toggle completada
   const toggleCompletada = (id, completada) => {
     fetch(`${API_URL}${id}/`, {
       method: 'PATCH',
@@ -90,7 +122,6 @@ function App() {
       .catch(err => console.error('Error al actualizar tarea:', err));
   };
 
-  // Eliminar tarea
   const eliminarTarea = id => {
     fetch(`${API_URL}${id}/`, {
       method: 'DELETE',
@@ -131,18 +162,14 @@ function App() {
       fontSize: 16,
       marginBottom: 10,
     },
-    lista: {
-      listStyle: 'none',
-      padding: 0,
+    alternar: {
+      background: 'none',
+      color: '#007BFF',
+      border: 'none',
+      textDecoration: 'underline',
+      cursor: 'pointer',
+      marginTop: 10,
     },
-    tarea: completada => ({
-      backgroundColor: completada ? '#d4edda' : '#fff',
-      textDecoration: completada ? 'line-through' : 'none',
-      border: '1px solid #ccc',
-      padding: 12,
-      marginBottom: 10,
-      borderRadius: 4,
-    }),
     eliminar: {
       backgroundColor: 'red',
       color: 'white',
@@ -152,13 +179,30 @@ function App() {
       borderRadius: 4,
       cursor: 'pointer',
     },
+    logout: {
+      backgroundColor: '#777',
+      color: 'white',
+      border: 'none',
+      padding: '8px 16px',
+      borderRadius: 4,
+      cursor: 'pointer',
+      marginBottom: 20,
+      fontSize: 14,
+    },
+    tarea: completada => ({
+      backgroundColor: completada ? '#d4edda' : '#fff',
+      textDecoration: completada ? 'line-through' : 'none',
+      border: '1px solid #ccc',
+      padding: 12,
+      marginBottom: 10,
+      borderRadius: 4,
+    }),
   };
 
-  // Renderizado condicionado por autenticación
   if (!token) {
     return (
       <div style={estilos.contenedor}>
-        <h1>🔒 Login</h1>
+        <h1>{mostrarRegistro ? '📝 Registro' : '🔒 Login'}</h1>
         <input
           type="text"
           placeholder="Usuario"
@@ -173,17 +217,30 @@ function App() {
           onChange={e => setPassword(e.target.value)}
           style={estilos.input}
         />
-        <button onClick={login} style={estilos.boton}>
-          Iniciar Sesión
+        <button
+          onClick={mostrarRegistro ? registrar : login}
+          style={estilos.boton}
+        >
+          {mostrarRegistro ? 'Registrar' : 'Iniciar Sesión'}
+        </button>
+        <button
+          onClick={() => setMostrarRegistro(!mostrarRegistro)}
+          style={estilos.alternar}
+        >
+          {mostrarRegistro
+            ? '¿Ya tienes cuenta? Inicia sesión'
+            : '¿No tienes cuenta? Regístrate aquí'}
         </button>
       </div>
     );
   }
 
-  // UI de tareas tras login
   return (
     <div style={estilos.contenedor}>
       <h1>📝 Mi ToDo List</h1>
+      <button onClick={logout} style={estilos.logout}>
+        Cerrar sesión
+      </button>
 
       <input
         type="text"
@@ -208,32 +265,32 @@ function App() {
         Agregar Tarea
       </button>
 
-      <ul style={estilos.lista}>
-        {tareas.length > 0 ? (
-          tareas.map(t => (
-            <li
-              key={t.id}
-              style={estilos.tarea(t.completada)}
-              onClick={() => toggleCompletada(t.id, t.completada)}
-            >
-              <strong>{t.titulo}</strong>
-              {t.descripcion && <p>{t.descripcion}</p>}
-              {t.fecha_limite && <p>📅 Vence: {t.fecha_limite}</p>}
-              <button
-                onClick={e => {
-                  e.stopPropagation();
-                  eliminarTarea(t.id);
-                }}
-                style={estilos.eliminar}
-              >
-                Eliminar
-              </button>
-            </li>
-          ))
-        ) : (
-          <p>No hay tareas para mostrar.</p>
-        )}
-      </ul>
+<ul style={{ listStyle: 'none', padding: 0 }}>
+  {tareas.length > 0 ? (
+    tareas.map(t => (
+      <li
+        key={t.id}
+        style={estilos.tarea(t.completada)}
+        onClick={() => toggleCompletada(t.id, t.completada)}
+      >
+        <strong>{t.titulo}</strong>
+        {t.descripcion && <p>{t.descripcion}</p>}
+        {t.fecha_limite && <p>📅 Vence: {t.fecha_limite}</p>}
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            eliminarTarea(t.id);
+          }}
+          style={estilos.eliminar}
+        >
+          Eliminar
+        </button>
+      </li>
+    ))
+  ) : (
+    <p>No hay tareas para mostrar.</p>
+  )}
+</ul>
     </div>
   );
 }
